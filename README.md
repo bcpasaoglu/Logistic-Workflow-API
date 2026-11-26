@@ -100,6 +100,10 @@ A small React + TypeScript dashboard in [`web/`](web) uses the real API: JWT sig
 
 ![LogisticDesk dashboard](docs/images/web-dashboard.png)
 
+Sign in, load a warehouse shipment onto a truck and deliver it (the truck goes back to *Available*):
+
+![Demo: load and deliver a shipment](docs/images/web-demo.gif)
+
 | Sign in | Capacity rule error |
 | --- | --- |
 | ![Sign in](docs/images/web-login.png) | ![Capacity exceeded](docs/images/web-capacity-error.png) |

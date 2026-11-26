@@ -1,4 +1,6 @@
 ﻿![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen?style=for-the-badge) ![.NET](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white) ![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=c-sharp&logoColor=white)
+[![CI](https://github.com/bcpasaoglu/Logistic-Workflow-API/actions/workflows/ci.yml/badge.svg)](https://github.com/bcpasaoglu/Logistic-Workflow-API/actions/workflows/ci.yml)
+
 # Project Purpose
 
 This project is a Logistics Workflow API project that I developed from scratch in order to **apply, test, and reinforce what I have learned** while taking my first steps into the .NET ecosystem and backend development.
@@ -42,6 +44,51 @@ In addition to standard CRUD operations such as adding, deleting, and updating v
 * `POST /api/Shipment/warehouse` -> Stores the shipment only in the warehouse without assigning it to a vehicle.
 * `POST /api/Shipment/assign-direct` -> Adds the shipment directly to the system and loads it onto a vehicle after performing capacity checks.
 * `PUT /api/Shipment/{shipmentId}/load-to-vehicle/{vehicleId}` -> Takes a shipment waiting in the warehouse and assigns it to an available vehicle.
+
+---
+
+## Running with Docker
+
+```bash
+docker compose up --build
+# API + Swagger UI: http://localhost:8080/swagger
+```
+
+`docker-compose.yml` starts MySQL 8.4 and the API. The API applies EF Core migrations on startup (`Database__MigrateOnStartup=true`), so no manual database setup is needed.
+
+## Running Locally
+
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Port=3306;Database=logisticdesk;User=...;Password=...;"
+dotnet ef database update
+dotnet run
+```
+
+## Tests
+
+```bash
+dotnet test LogisticDesk.slnx
+```
+
+The `tests/LogisticDesk.Tests` project (xUnit + EF Core InMemory) covers the assignment rules and the shipment endpoints:
+
+* capacity limits, including a shipment exactly at capacity
+* rejecting vehicles that are on route or in maintenance
+* warehouse → vehicle loading and the resulting status changes
+* updates cannot bypass the capacity checks by changing the vehicle or raising the weight
+
+GitHub Actions builds the solution, runs the tests and builds the Docker image on every push and pull request.
+
+## Project Structure
+
+```
+Controllers/        Auth, Shipment and Vehicle endpoints
+Services/           ShipmentAssignmentRules: capacity and availability rules, kept free of EF/HTTP
+DTOs/               Request models with validation attributes
+Models/, Enums/     EF Core entities and status enums
+Data/, Migrations/  DbContext and Code-First migrations
+tests/              xUnit test project
+```
 
 ---
 

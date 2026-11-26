@@ -75,8 +75,16 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 
 var app = builder.Build();
+
+// Apply pending EF Core migrations on startup when enabled (used by docker-compose).
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    using var scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<LogisticDesk.Data.LogiDbContext>().Database.Migrate();
+}
+
 // Configure the HTTP request pipeline. 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -84,7 +92,10 @@ if (app.Environment.IsDevelopment())
 
 
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("Docker"))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowFrontend");
 
@@ -93,3 +104,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.Run();
+
+// Exposed so integration tests can reference the entry point.
+public partial class Program { }

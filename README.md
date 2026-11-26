@@ -9,7 +9,7 @@ A logistics workflow API in ASP.NET Core with a small React dashboard. Dispatche
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 
-![Signing in, loading a shipment onto a truck and delivering it](docs/images/web-demo.gif)
+![All endpoints in Swagger UI](docs/images/swagger-ui.png)
 
 ## Why I built this
 
@@ -27,26 +27,27 @@ I started this project to apply what I was learning as I took my first steps int
 - Every error comes back in one JSON shape (RFC 7807 ProblemDetails), with the reason in `detail`. The UI shows that text as it is.
 - There are liveness and readiness health checks, and Swagger documents every endpoint.
 
-## Screenshots
+## The API in action
 
-| Dashboard | Capacity rule in the UI |
-| --- | --- |
-| ![Dashboard with a shipment in transit selected](docs/images/web-dashboard.png) | ![A 9,000 kg shipment rejected by a 3,500 kg truck](docs/images/web-capacity-error.png) |
-| **Sign in** | **Swagger UI** |
-| ![Sign-in page](docs/images/web-login.png) | ![All endpoints in Swagger UI](docs/images/swagger-ui.png) |
+Every request below was sent from Swagger UI with a real JWT against seeded demo data.
 
-<details>
-<summary>The same calls straight from Swagger</summary>
+A paged list, `GET /api/Shipment?pageSize=2`. The response carries the items plus `page`, `pageSize`, `totalCount` and `totalPages`:
 
-A paged list: `GET /api/Shipment?pageSize=2`
+![Paged shipment list in Swagger UI](docs/images/swagger-paged-list.png)
 
-![Paged shipment list](docs/images/swagger-paged-list.png)
+A business rule refusing a request. A 15,000 kg shipment is sent to a 5,000 kg truck, and the API answers with a 400 ProblemDetails that puts the reason in `detail`:
 
-A 15,000 kg shipment sent to a 5,000 kg truck:
+![Capacity error returned as ProblemDetails](docs/images/swagger-problem-details.png)
 
-![Capacity error as ProblemDetails](docs/images/swagger-problem-details.png)
+## Web dashboard
 
-</details>
+There is a small React client in [`web/`](web) to show the API being used end to end. Here it signs in, loads a warehouse shipment onto a truck and delivers it, and the truck goes back to *Available*:
+
+<img src="docs/images/web-demo.gif" alt="Signing in, loading a shipment onto a truck and delivering it" width="720">
+
+| Dashboard | Capacity rule in the UI | Sign in |
+| --- | --- | --- |
+| <img src="docs/images/web-dashboard.png" alt="Dashboard with a shipment in transit selected" width="300"> | <img src="docs/images/web-capacity-error.png" alt="A 9,000 kg shipment rejected by a 3,500 kg truck" width="260"> | <img src="docs/images/web-login.png" alt="Sign-in page" width="200"> |
 
 ## How it fits together
 

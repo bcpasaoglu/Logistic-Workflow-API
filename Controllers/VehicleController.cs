@@ -54,13 +54,13 @@ namespace LogisticDesk.Controllers
                 MaxCapacity = Math.Round(vehicleDto.MaxCapacity,2),
                 Status = VehicleStatus.Available,
                 CreatedAt = DateTime.UtcNow,
-                IsActive = false
+                IsActive = vehicleDto.IsActive
             };
             _context.Vehicles.Add(newVehicle);
             await _context.SaveChangesAsync();
             return Ok(newVehicle);
         }
-        [HttpPut]
+        [HttpPut("{id}")]
         public async Task<IActionResult> UpdateVehicleById(int id, [FromBody] VehicleAddingDto vehicleDto)
         {
             if (id <= 0)

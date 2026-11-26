@@ -2,6 +2,7 @@
 using LogisticDesk.DTOs;
 using LogisticDesk.Enums;
 using LogisticDesk.Models;
+using LogisticDesk.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,9 +46,10 @@ namespace LogisticDesk.Controllers
 
             Shipment newShipment = new Shipment
             {
-                TrackingNumber = shipmentDto.TrackingNumber ?? Guid.NewGuid().ToString().Substring(0, 8).ToUpper(),
+                TrackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber),
                 Weight = Math.Round(shipmentDto.Weight, 2),
                 ReceiverAddress = shipmentDto.ReceiverAddress,
+                Status = ShipmentStatus.Pending,
                 VehicleId = null, // Not assigned to any vehicle yet
                 CreatedAt = DateTime.UtcNow
             };
@@ -74,26 +76,22 @@ namespace LogisticDesk.Controllers
                 return NotFound("The vehicle intended for assignment was not found.");
             }
 
-            if (vehicle.Status != VehicleStatus.Available)
+            var error = ShipmentAssignmentRules.Validate(vehicle, shipmentDto.Weight);
+            if (error != null)
             {
-                return BadRequest("This vehicle is currently not available (On Route or Under Maintenance).");
-            }
-
-            if (shipmentDto.Weight > vehicle.MaxCapacity)
-            {
-                return BadRequest($"Capacity exceeded! The vehicle can carry a maximum of {vehicle.MaxCapacity}, but the shipment weighs {shipmentDto.Weight}.");
+                return BadRequest(error);
             }
 
             Shipment newShipment = new Shipment
             {
-                TrackingNumber = shipmentDto.TrackingNumber ?? Guid.NewGuid().ToString().Substring(0, 8).ToUpper(),
+                TrackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber),
                 ReceiverAddress = shipmentDto.ReceiverAddress,
                 Weight = Math.Round(shipmentDto.Weight, 2),
-                VehicleId = vehicle.Id,
+                Status = ShipmentStatus.Pending,
                 CreatedAt = DateTime.UtcNow
             };
 
-            vehicle.Status = VehicleStatus.OnRoute;
+            ShipmentAssignmentRules.Assign(newShipment, vehicle);
 
             _context.Shipments.Add(newShipment);
             await _context.SaveChangesAsync();
@@ -111,11 +109,11 @@ namespace LogisticDesk.Controllers
 
             var vehicle = await _context.Vehicles.FindAsync(vehicleId);
             if (vehicle == null) return NotFound("Vehicle not found.");
-            if (vehicle.Status != VehicleStatus.Available) return BadRequest("Vehicle is not available.");
-            if (shipment.Weight > vehicle.MaxCapacity) return BadRequest("Shipment is too heavy for this vehicle.");
 
-            shipment.VehicleId = vehicle.Id; // Assign shipment to vehicle
-            vehicle.Status = VehicleStatus.OnRoute;
+            var error = ShipmentAssignmentRules.Validate(vehicle, shipment.Weight);
+            if (error != null) return BadRequest(error);
+
+            ShipmentAssignmentRules.Assign(shipment, vehicle);
 
             await _context.SaveChangesAsync();
             return Ok(shipment);
@@ -132,12 +130,33 @@ namespace LogisticDesk.Controllers
             {
                 return NotFound();
             }
-            shipment.TrackingNumber = shipmentDto.TrackingNumber;
-            shipment.Weight = Math.Round(shipmentDto.Weight, 2);
+            // Moving a shipment to another vehicle must go through the same
+            // capacity and availability checks as a normal assignment.
+            if (shipmentDto.VehicleId != shipment.VehicleId)
+            {
+                return BadRequest("Use the load-to-vehicle endpoint to change a shipment's vehicle.");
+            }
+
+            var newWeight = Math.Round(shipmentDto.Weight, 2);
+            if (shipment.VehicleId != null && newWeight > shipment.Weight)
+            {
+                var vehicle = await _context.Vehicles.FindAsync(shipment.VehicleId);
+                if (vehicle != null && newWeight > vehicle.MaxCapacity)
+                {
+                    return BadRequest($"Capacity exceeded! The vehicle can carry a maximum of {vehicle.MaxCapacity}, but the shipment weighs {newWeight}.");
+                }
+            }
+
+            shipment.TrackingNumber = shipmentDto.TrackingNumber ?? shipment.TrackingNumber;
+            shipment.Weight = newWeight;
             shipment.ReceiverAddress = shipmentDto.ReceiverAddress;
-            shipment.VehicleId = shipmentDto.VehicleId;
             await _context.SaveChangesAsync();
             return Ok(shipment);
         }
+
+        private static string NewTrackingNumberIfMissing(string? trackingNumber) =>
+            string.IsNullOrWhiteSpace(trackingNumber)
+                ? Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()
+                : trackingNumber.Trim();
     }
 }

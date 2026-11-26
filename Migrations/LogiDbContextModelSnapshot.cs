@@ -120,15 +120,20 @@ namespace LogisticDesk.Migrations
 
                     b.Property<string>("TrackingNumber")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
 
                     b.Property<int?>("VehicleId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Weight")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TrackingNumber")
+                        .IsUnique();
 
                     b.HasIndex("VehicleId");
 
@@ -150,7 +155,8 @@ namespace LogisticDesk.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<decimal>("MaxCapacity")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("PlateNumber")
                         .IsRequired()

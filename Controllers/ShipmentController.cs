@@ -1,4 +1,5 @@
-﻿using LogisticDesk.Data;
+using Microsoft.AspNetCore.Authorization;
+using LogisticDesk.Data;
 using LogisticDesk.DTOs;
 using LogisticDesk.Enums;
 using LogisticDesk.Models;
@@ -8,8 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LogisticDesk.Controllers
 {
+    /// <summary>Creates, assigns and tracks shipments.</summary>
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
+    [Produces("application/json")]
     public class ShipmentController : ControllerBase
     {
         private readonly LogiDbContext _context;
@@ -18,13 +22,32 @@ namespace LogisticDesk.Controllers
             _context = context;
         }
 
+        /// <summary>Lists shipments, newest first, one page at a time.</summary>
+        /// <param name="query">Page number and page size (max 100).</param>
+        /// <param name="status">Optional status filter.</param>
+        /// <param name="cancellationToken">Request cancellation token.</param>
         [HttpGet]
-        public async Task<IActionResult> GetShipments()
+        [ProducesResponseType(typeof(PagedResult<Shipment>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> GetShipments([FromQuery] PaginationQuery query, [FromQuery] ShipmentStatus? status = null, CancellationToken cancellationToken = default)
         {
-            var shipments = await _context.Shipments.ToListAsync();
-            return Ok(shipments);
+            var shipments = _context.Shipments.AsNoTracking().AsQueryable();
+            if (status != null)
+            {
+                shipments = shipments.Where(s => s.Status == status);
+            }
+
+            var page = await shipments
+                .OrderByDescending(s => s.CreatedAt)
+                .ThenByDescending(s => s.Id)
+                .ToPagedResultAsync(query, cancellationToken);
+            return Ok(page);
         }
+
+        /// <summary>Gets a single shipment.</summary>
         [HttpGet("{id}")]
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetShipmentById(int id)
         {
             var shipment = await _context.Shipments.FindAsync(id);
@@ -36,7 +59,12 @@ namespace LogisticDesk.Controllers
         }
 
 
+        /// <summary>Stores a new shipment in the warehouse without assigning a vehicle.</summary>
+        /// <remarks>A tracking number is generated when none is supplied.</remarks>
         [HttpPost("warehouse")] // URL: api/Shipment/warehouse
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> AddShipmentToWarehouse([FromBody] ShipmentAddingDto shipmentDto)
         {
             if (shipmentDto == null)
@@ -44,9 +72,15 @@ namespace LogisticDesk.Controllers
                 return BadRequest("Shipment data cannot be null.");
             }
 
+            var trackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber);
+            if (await TrackingNumberTaken(trackingNumber))
+            {
+                return Conflict($"Tracking number '{trackingNumber}' is already in use.");
+            }
+
             Shipment newShipment = new Shipment
             {
-                TrackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber),
+                TrackingNumber = trackingNumber,
                 Weight = Math.Round(shipmentDto.Weight, 2),
                 ReceiverAddress = shipmentDto.ReceiverAddress,
                 Status = ShipmentStatus.Pending,
@@ -61,7 +95,12 @@ namespace LogisticDesk.Controllers
         }
 
 
+        /// <summary>Creates a shipment and loads it onto a vehicle in one step.</summary>
+        /// <remarks>The vehicle must be Available and its MaxCapacity must cover the shipment weight. On success the shipment becomes InTransit and the vehicle OnRoute.</remarks>
         [HttpPost("assign-direct")] // URL: api/Shipment/assign-direct
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> AssignShipmentDirectly([FromBody] ShipmentAddingDto shipmentDto)
         {
             // If VehicleId is not provided from the outside, throw an error
@@ -82,9 +121,15 @@ namespace LogisticDesk.Controllers
                 return BadRequest(error);
             }
 
+            var trackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber);
+            if (await TrackingNumberTaken(trackingNumber))
+            {
+                return Conflict($"Tracking number '{trackingNumber}' is already in use.");
+            }
+
             Shipment newShipment = new Shipment
             {
-                TrackingNumber = NewTrackingNumberIfMissing(shipmentDto.TrackingNumber),
+                TrackingNumber = trackingNumber,
                 ReceiverAddress = shipmentDto.ReceiverAddress,
                 Weight = Math.Round(shipmentDto.Weight, 2),
                 Status = ShipmentStatus.Pending,
@@ -100,7 +145,11 @@ namespace LogisticDesk.Controllers
         }
 
 
+        /// <summary>Loads a shipment waiting in the warehouse onto an available vehicle.</summary>
         [HttpPut("{shipmentId}/load-to-vehicle/{vehicleId}")]
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> LoadFromWarehouseToVehicle(int shipmentId, int vehicleId)
         {
             var shipment = await _context.Shipments.FindAsync(shipmentId);
@@ -118,7 +167,40 @@ namespace LogisticDesk.Controllers
             await _context.SaveChangesAsync();
             return Ok(shipment);
         }
+        /// <summary>Marks an in-transit shipment as delivered and frees its vehicle.</summary>
+        /// <remarks>The vehicle returns to Available when it has no other shipment in transit.</remarks>
+        [HttpPut("{id}/deliver")]
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> DeliverShipment(int id)
+        {
+            var shipment = await _context.Shipments.FindAsync(id);
+            if (shipment == null) return NotFound("Shipment not found.");
+
+            var error = ShipmentAssignmentRules.ValidateDelivery(shipment);
+            if (error != null) return Conflict(error);
+
+            Vehicle? vehicle = null;
+            var othersInTransit = false;
+            if (shipment.VehicleId != null)
+            {
+                vehicle = await _context.Vehicles.FindAsync(shipment.VehicleId);
+                othersInTransit = await _context.Shipments.AnyAsync(s =>
+                    s.VehicleId == shipment.VehicleId && s.Id != shipment.Id && s.Status == ShipmentStatus.InTransit);
+            }
+
+            ShipmentAssignmentRules.Deliver(shipment, vehicle, othersInTransit);
+            await _context.SaveChangesAsync();
+            return Ok(shipment);
+        }
+
+        /// <summary>Updates tracking number, weight and address of a shipment.</summary>
+        /// <remarks>The vehicle cannot be changed here (use load-to-vehicle), and the weight cannot exceed the assigned vehicle's capacity.</remarks>
         [HttpPut("{id}")]
+        [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UpdateShipmentById(int id, [FromBody] ShipmentAddingDto shipmentDto)
         {
             if (id <= 0)
@@ -147,12 +229,45 @@ namespace LogisticDesk.Controllers
                 }
             }
 
-            shipment.TrackingNumber = shipmentDto.TrackingNumber ?? shipment.TrackingNumber;
+            var trackingNumber = string.IsNullOrWhiteSpace(shipmentDto.TrackingNumber)
+                ? shipment.TrackingNumber
+                : shipmentDto.TrackingNumber.Trim();
+            if (trackingNumber != shipment.TrackingNumber && await TrackingNumberTaken(trackingNumber))
+            {
+                return Conflict($"Tracking number '{trackingNumber}' is already in use.");
+            }
+
+            shipment.TrackingNumber = trackingNumber;
             shipment.Weight = newWeight;
             shipment.ReceiverAddress = shipmentDto.ReceiverAddress;
             await _context.SaveChangesAsync();
             return Ok(shipment);
         }
+
+        /// <summary>Deletes a shipment that is not currently in transit.</summary>
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> DeleteShipmentById(int id)
+        {
+            var shipment = await _context.Shipments.FindAsync(id);
+            if (shipment == null)
+            {
+                return NotFound();
+            }
+            if (shipment.Status == ShipmentStatus.InTransit)
+            {
+                return Conflict("A shipment that is in transit cannot be deleted.");
+            }
+
+            _context.Shipments.Remove(shipment);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        private Task<bool> TrackingNumberTaken(string trackingNumber) =>
+            _context.Shipments.AnyAsync(s => s.TrackingNumber == trackingNumber);
 
         private static string NewTrackingNumberIfMissing(string? trackingNumber) =>
             string.IsNullOrWhiteSpace(trackingNumber)

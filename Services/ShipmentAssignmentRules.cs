@@ -38,5 +38,28 @@ namespace LogisticDesk.Services
             shipment.Status = ShipmentStatus.InTransit;
             vehicle.Status = VehicleStatus.OnRoute;
         }
+
+        /// <summary>
+        /// Returns null when the shipment can be marked as delivered, otherwise the reason it cannot.
+        /// </summary>
+        public static string? ValidateDelivery(Shipment shipment) => shipment.Status switch
+        {
+            ShipmentStatus.InTransit => null,
+            ShipmentStatus.Delivered => "This shipment has already been delivered.",
+            _ => "Only shipments that are in transit can be delivered.",
+        };
+
+        /// <summary>
+        /// Marks the shipment as delivered. The vehicle becomes available again once it
+        /// carries no other shipment that is still in transit.
+        /// </summary>
+        public static void Deliver(Shipment shipment, Vehicle? vehicle, bool vehicleHasOtherShipmentsInTransit)
+        {
+            shipment.Status = ShipmentStatus.Delivered;
+            if (vehicle != null && !vehicleHasOtherShipmentsInTransit && vehicle.Status == VehicleStatus.OnRoute)
+            {
+                vehicle.Status = VehicleStatus.Available;
+            }
+        }
     }
 }

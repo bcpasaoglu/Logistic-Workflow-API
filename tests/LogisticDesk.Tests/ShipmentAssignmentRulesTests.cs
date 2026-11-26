@@ -57,4 +57,34 @@ public class ShipmentAssignmentRulesTests
         Assert.Equal(ShipmentStatus.InTransit, shipment.Status);
         Assert.Equal(VehicleStatus.OnRoute, vehicle.Status);
     }
+
+    [Fact]
+    public void Delivery_frees_the_vehicle_when_nothing_else_is_in_transit()
+    {
+        var vehicle = new Vehicle { Status = VehicleStatus.OnRoute };
+        var shipment = new Shipment { Status = ShipmentStatus.InTransit };
+
+        ShipmentAssignmentRules.Deliver(shipment, vehicle, vehicleHasOtherShipmentsInTransit: false);
+
+        Assert.Equal(ShipmentStatus.Delivered, shipment.Status);
+        Assert.Equal(VehicleStatus.Available, vehicle.Status);
+    }
+
+    [Fact]
+    public void Delivery_keeps_vehicle_on_route_while_other_shipments_are_in_transit()
+    {
+        var vehicle = new Vehicle { Status = VehicleStatus.OnRoute };
+
+        ShipmentAssignmentRules.Deliver(new Shipment { Status = ShipmentStatus.InTransit }, vehicle, vehicleHasOtherShipmentsInTransit: true);
+
+        Assert.Equal(VehicleStatus.OnRoute, vehicle.Status);
+    }
+
+    [Theory]
+    [InlineData(ShipmentStatus.Pending)]
+    [InlineData(ShipmentStatus.Delivered)]
+    public void Only_in_transit_shipments_can_be_delivered(ShipmentStatus status)
+    {
+        Assert.NotNull(ShipmentAssignmentRules.ValidateDelivery(new Shipment { Status = status }));
+    }
 }

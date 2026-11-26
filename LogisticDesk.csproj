@@ -1,9 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Only public API members that feed Swagger need XML docs. -->
+		<NoWarn>$(NoWarn);1591</NoWarn>
 		<UserSecretsId>9627aa89-2ea9-4312-92d4-ccecaeff7c48</UserSecretsId>
 	</PropertyGroup>
 
@@ -15,6 +18,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.18" />
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.18" />
 
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.18" />
@@ -25,6 +29,8 @@
 				runtime; build; native; contentfiles; analyzers; buildtransitive
 			</IncludeAssets>
 		</PackageReference>
+
+		<PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.18" />
 
 		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
 

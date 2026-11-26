@@ -139,4 +139,61 @@ public class ShipmentControllerTests
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
+
+    [Fact]
+    public async Task List_is_paged_and_can_filter_by_status()
+    {
+        await using var db = NewContext();
+        var vehicle = await SeedVehicle(db, capacity: 10_000m);
+        var controller = new ShipmentController(db);
+        for (var i = 0; i < 3; i++) await controller.AddShipmentToWarehouse(Dto(10m));
+        await controller.AssignShipmentDirectly(Dto(10m, vehicle.Id));
+
+        var all = (PagedResult<Shipment>)((OkObjectResult)await controller.GetShipments(new PaginationQuery { PageSize = 2 })).Value!;
+        var pending = (PagedResult<Shipment>)((OkObjectResult)await controller.GetShipments(new PaginationQuery(), ShipmentStatus.Pending)).Value!;
+
+        Assert.Equal(4, all.TotalCount);
+        Assert.Equal(2, all.Items.Count);
+        Assert.Equal(2, all.TotalPages);
+        Assert.Equal(3, pending.TotalCount);
+        Assert.All(pending.Items, s => Assert.Equal(ShipmentStatus.Pending, s.Status));
+    }
+
+    [Fact]
+    public async Task Shipment_in_transit_cannot_be_deleted()
+    {
+        await using var db = NewContext();
+        var vehicle = await SeedVehicle(db);
+        var controller = new ShipmentController(db);
+        var shipment = (Shipment)((OkObjectResult)await controller.AssignShipmentDirectly(Dto(10m, vehicle.Id))).Value!;
+
+        Assert.IsType<ConflictObjectResult>(await controller.DeleteShipmentById(shipment.Id));
+        Assert.Single(db.Shipments);
+    }
+
+    [Fact]
+    public async Task Warehouse_shipment_can_be_deleted()
+    {
+        await using var db = NewContext();
+        var controller = new ShipmentController(db);
+        var shipment = (Shipment)((OkObjectResult)await controller.AddShipmentToWarehouse(Dto(10m))).Value!;
+
+        Assert.IsType<NoContentResult>(await controller.DeleteShipmentById(shipment.Id));
+        Assert.Empty(db.Shipments);
+    }
+
+    [Fact]
+    public async Task Duplicate_tracking_number_is_rejected()
+    {
+        await using var db = NewContext();
+        var controller = new ShipmentController(db);
+        var dto = Dto(10m);
+        dto.TrackingNumber = "TR-1001";
+        await controller.AddShipmentToWarehouse(dto);
+
+        var result = await controller.AddShipmentToWarehouse(dto);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Single(db.Shipments);
+    }
 }

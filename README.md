@@ -1,214 +1,139 @@
-![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen?style=for-the-badge) ![.NET](https://img.shields.io/badge/.NET_9-5C2D91?style=for-the-badge&logo=.net&logoColor=white) ![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=c-sharp&logoColor=white) ![Azure](https://img.shields.io/badge/Azure-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white) ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)
+# LogisticDesk
+
+A logistics workflow API in ASP.NET Core with a small React dashboard. Dispatchers register vehicles, take shipments into a warehouse and load them onto trucks. The API refuses any load that a truck can't carry or that goes to a truck that isn't free.
+
 [![CI](https://github.com/bcpasaoglu/Logistic-Workflow-API/actions/workflows/ci.yml/badge.svg)](https://github.com/bcpasaoglu/Logistic-Workflow-API/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-47%20xUnit%20%2B%208%20Vitest-2ea44f)
+![.NET](https://img.shields.io/badge/.NET-9-512BD4)
+![React](https://img.shields.io/badge/React-18%20%2B%20TypeScript-3178C6)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Status](https://img.shields.io/badge/status-active-brightgreen)
 
-# Project Purpose
+![Signing in, loading a shipment onto a truck and delivering it](docs/images/web-demo.gif)
 
-This project is a Logistics Workflow API project that I developed from scratch in order to **apply, test, and reinforce what I have learned** while taking my first steps into the .NET ecosystem and backend development.
+## Why I built this
 
-Rather than creating only a simple "add/delete data" CRUD application, I aimed to implement real-world business rules in code and establish interconnected database relationships.
+I started this project to apply what I was learning as I took my first steps into .NET and backend development. I didn't want another add/delete CRUD app. I wanted real business rules in code and tables that depend on each other. A truck has a capacity, it can be on the road or in maintenance, and a shipment either waits in the warehouse or is loaded onto a truck. Those rules are small enough to fit in one project, but they still make you think about validation, state changes and what the API should say when a request breaks a rule.
 
----
+## What it does
 
-## What Did I Learn and Apply in This Project?
+- Vehicles have a plate, a capacity and a status: `Available`, `OnRoute` or `InMaintenance`.
+- A shipment can go into the warehouse first and be loaded later, or it can be loaded onto a truck straight away.
+- Loading is checked twice: the truck has to be available, and the shipment has to fit its capacity. A successful load puts the truck `OnRoute`.
+- Delivering a shipment frees the truck for its next load.
+- The API refuses to delete a truck that still has shipments or a shipment that is in transit. Tracking numbers are unique.
+- Users register and sign in with a JWT, and every vehicle and shipment endpoint requires the token.
+- Lists are paged, and shipments can be filtered by status.
+- Every error comes back in one JSON shape (RFC 7807 ProblemDetails), with the reason in `detail`. The UI shows that text as it is.
+- There are liveness and readiness health checks, and Swagger documents every endpoint.
 
-Throughout the development process, I researched and solved the problems I encountered, and I had the opportunity to practise the following topics:
+## Screenshots
 
-* **Entity Framework Core & MySQL Integration:** I created database tables through C# code using the Code-First approach and learned the logic of `Migration`.
-* **Business Logic Implementation:**
+| Dashboard | Capacity rule in the UI |
+| --- | --- |
+| ![Dashboard with a shipment in transit selected](docs/images/web-dashboard.png) | ![A 9,000 kg shipment rejected by a 3,500 kg truck](docs/images/web-capacity-error.png) |
+| **Sign in** | **Swagger UI** |
+| ![Sign-in page](docs/images/web-login.png) | ![All endpoints in Swagger UI](docs/images/swagger-ui.png) |
 
-  * While assigning a shipment to a vehicle, I wrote validation algorithms that check the vehicle's **availability status** and **maximum carrying capacity**.
-  * I ensured that the system rejects the request if the capacity is exceeded, and automatically updates the vehicle status to `OnRoute` if all conditions are met.
-* **Flexible API Design:** To simulate real-life processes, I designed flexible Controller methods that support different scenarios, such as assigning shipments directly to a vehicle or storing them in the warehouse first and loading them onto a vehicle later.
-* **Error Resolution and Architectural Configuration:**
+<details>
+<summary>The same calls straight from Swagger</summary>
 
-  * While retrieving relational data, such as the vehicle inside a shipment or the shipments inside a vehicle, I learned how to solve the **Object Cycle** error by using `ReferenceHandler.IgnoreCycles`.
-  * In order to connect the project to a frontend application in the future, I researched, learned about, and successfully configured **CORS policies** that allow requests from external applications.
+A paged list: `GET /api/Shipment?pageSize=2`
 
----
+![Paged shipment list](docs/images/swagger-paged-list.png)
 
-## Technologies Used
+A 15,000 kg shipment sent to a 5,000 kg truck:
 
-* **Frontend:** React 18, TypeScript, Vite, served by nginx
-* **Language & Framework:** C#, .NET 9, ASP.NET Core Web API, ASP.NET Core Identity, JWT bearer authentication
-* **Database & ORM:** MySQL 8, Entity Framework Core (Code-First migrations, Pomelo provider)
-* **API Documentation:** Swagger / OpenAPI generated from XML doc comments
-* **Testing:** xUnit, EF Core InMemory, `WebApplicationFactory` integration tests
-* **DevOps & Cloud:** Docker, docker-compose, GitHub Actions (CI + CD), Terraform, Azure Container Apps, Azure Database for MySQL, Azure Container Registry
-* **Architectural Concepts:** Asynchronous Programming (`async/await`), RESTful API Design, RFC 7807 ProblemDetails, health checks, pagination
+![Capacity error as ProblemDetails](docs/images/swagger-problem-details.png)
 
----
+</details>
 
-## Architecture
+## How it fits together
 
 ```mermaid
 flowchart LR
-    client[Client / Swagger UI] -->|HTTPS| api[ASP.NET Core API<br/>Controllers + ShipmentAssignmentRules]
-    api -->|EF Core| db[(MySQL)]
-    gh[GitHub Actions] -->|build, test, push image| acr[(Azure Container Registry)]
+    ui[React dashboard<br/>nginx] -->|/api, JWT| api[ASP.NET Core API]
+    swagger[Swagger UI] --> api
+    api --> rules[ShipmentAssignmentRules]
+    api -->|EF Core| db[(MySQL 8)]
+    gh[GitHub Actions] -->|image| acr[(Azure Container Registry)]
     acr --> aca[Azure Container Apps]
     aca -.runs.-> api
 ```
 
-More diagrams (request pipeline, shipment lifecycle, data model, Azure deployment) are in [docs/architecture.md](docs/architecture.md).
-
----
-
-## API Overview
-
-![Swagger UI](docs/images/swagger-ui.png)
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/api/Vehicle?page=1&pageSize=20` | Paged list of vehicles |
-| `GET` | `/api/Vehicle/status/{status}` | Paged list filtered by `Available`, `OnRoute` or `InMaintenance` |
-| `GET` / `PUT` / `DELETE` | `/api/Vehicle/{id}` | Read, update or delete a vehicle (delete is refused with `409` while shipments are assigned) |
-| `POST` | `/api/Vehicle` | Register a vehicle |
-| `GET` | `/api/Shipment?page=1&pageSize=20&status=Pending` | Paged list of shipments, newest first, optional status filter |
-| `GET` / `PUT` / `DELETE` | `/api/Shipment/{id}` | Read, update or delete a shipment (in-transit shipments cannot be deleted) |
-| `POST` | `/api/Shipment/warehouse` | Store a shipment in the warehouse without a vehicle |
-| `POST` | `/api/Shipment/assign-direct` | Create a shipment and load it onto a vehicle after capacity checks |
-| `PUT` | `/api/Shipment/{shipmentId}/load-to-vehicle/{vehicleId}` | Load a warehouse shipment onto an available vehicle |
-| `PUT` | `/api/Shipment/{id}/deliver` | Mark an in-transit shipment `Delivered` and return its vehicle to `Available` |
-| `POST` | `/api/auth/register` | Register a user (ASP.NET Core Identity, public) |
-| `POST` | `/api/auth/login` | Exchange email + password for a JWT access token (public) |
-| `GET` | `/api/auth/me` | The user the token belongs to |
-| `GET` | `/health/live`, `/health/ready` | Liveness and readiness (database) probes |
-
-**Authentication:** all vehicle and shipment endpoints require `Authorization: Bearer <token>`. Register, call `/api/auth/login`, then press **Authorize** in Swagger UI and paste the `accessToken`. Tokens are HS256-signed JWTs (30 minutes) validated for issuer, audience, lifetime and signature; failed logins count towards Identity's lockout (5 attempts → 15 minutes), and unknown emails and wrong passwords return the same message. The signing key is never in the repository: the app refuses to start without a key of at least 32 bytes.
-
-**Pagination:** list endpoints return
-
-```json
-{ "items": [ ... ], "page": 1, "pageSize": 20, "totalCount": 42, "totalPages": 3, "hasNextPage": true, "hasPreviousPage": false }
-```
-
-`pageSize` is limited to 100. A real request against the demo data, executed in Swagger UI with a JWT:
-
-![Paged shipment list in Swagger UI](docs/images/swagger-paged-list.png)
-
-**Errors:** every error response uses [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807) with a `traceId`: validation errors, business rule violations (`400`/`404`/`409` with the reason in `detail`) and unhandled exceptions, which a global `IExceptionHandler` maps to `409` for database conflicts and `500` otherwise, without exposing exception details outside Development. Loading a 15,000 kg shipment onto a 12,000 kg truck:
-
-![Capacity rule violation returned as ProblemDetails](docs/images/swagger-problem-details.png)
-
-Enums are sent and accepted as names (`"OnRoute"`), and tracking numbers are unique.
-
----
-
-## Web UI
-
-A small React + TypeScript dashboard in [`web/`](web) uses the real API: JWT sign-in, the fleet with live load per vehicle, paged shipments with status filters, creating shipments (warehouse or direct load), loading onto a vehicle, delivering and deleting. Business rule errors from the API are shown as they come back, for example a shipment that is too heavy for the selected truck:
-
-![LogisticDesk dashboard](docs/images/web-dashboard.png)
-
-Sign in, load a warehouse shipment onto a truck and deliver it (the truck goes back to *Available*):
-
-![Demo: load and deliver a shipment](docs/images/web-demo.gif)
-
-| Sign in | Capacity rule error |
+| Layer | What is used |
 | --- | --- |
-| ![Sign in](docs/images/web-login.png) | ![Capacity exceeded](docs/images/web-capacity-error.png) |
+| API | C#, .NET 9, ASP.NET Core Web API, ASP.NET Core Identity, JWT bearer auth |
+| Data | MySQL 8, Entity Framework Core (code-first migrations, Pomelo provider) |
+| Frontend | React 18, TypeScript, Vite, served by nginx |
+| Tests | xUnit, EF Core InMemory, `WebApplicationFactory`, Vitest |
+| Delivery | Docker, Docker Compose, GitHub Actions (CI and CD), Terraform, Azure Container Apps, Azure Database for MySQL |
 
-```bash
-cd web
-npm install
-npm run dev        # http://localhost:5173, proxies /api to http://localhost:8080
-npm test           # unit tests for the fleet and error helpers
+There are more diagrams in [docs/architecture.md](docs/architecture.md): the request pipeline, the shipment lifecycle, the data model and the Azure deployment.
+
+```
+Controllers/        Auth, Shipment and Vehicle endpoints (+ ProblemDetails base controller)
+Services/           ShipmentAssignmentRules, JwtTokenService
+Infrastructure/     Global exception handler, Swagger auth filter
+DTOs/, Models/      Request models with validation, EF Core entities
+Data/, Migrations/  DbContext and migrations
+tests/              xUnit unit and integration tests
+web/                React dashboard
+infra/terraform/    Azure infrastructure
 ```
 
-With Docker Compose the UI is served by nginx on http://localhost:3000 and forwards `/api` to the API container, so no CORS setup is needed.
+## Running it
 
----
-
-## Running with Docker
+With Docker, one command starts MySQL, the API and the dashboard:
 
 ```bash
 docker compose up --build
-# Web UI:            http://localhost:3000
-# API + Swagger UI:  http://localhost:8080/swagger
 ```
 
-`docker-compose.yml` starts MySQL 8.4, the API and the web UI. The API applies EF Core migrations on startup (`Database__MigrateOnStartup=true`), so no manual database setup is needed. The default database passwords in the compose file are for local development only; override them with `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`.
+- Dashboard: http://localhost:3000. Register an account there, then sign in.
+- Swagger UI: http://localhost:8080/swagger. Sign in with `/api/auth/login`, press **Authorize** and paste the token.
 
-## Running Locally
+The API runs its migrations on startup. The passwords and JWT key in `docker-compose.yml` are for local use only. You can override them with `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` and `JWT_SIGNING_KEY`.
+
+Without Docker, you need the .NET 9 SDK, Node 22 and a MySQL server:
 
 ```bash
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Port=3306;Database=logisticdesk;User=...;Password=...;"
 dotnet user-secrets set "Jwt:SigningKey" "$(openssl rand -base64 48)"
 dotnet ef database update
-dotnet run
+dotnet run                       # API on http://localhost:5065
+
+cd web && npm install
+API_URL=http://localhost:5065 npm run dev   # dashboard on http://localhost:5173
 ```
 
-Connection strings and the JWT signing key are never committed: locally they come from user secrets, in Docker from environment variables and on Azure from Container Apps secrets generated by Terraform.
-
-## Tests
+Tests:
 
 ```bash
-dotnet test LogisticDesk.slnx
+dotnet test LogisticDesk.slnx    # 47 tests: rules, controllers, JWT, full HTTP pipeline
+cd web && npm test               # 8 tests: fleet and error helpers
 ```
 
-The `tests/LogisticDesk.Tests` project has 47 tests. Unit tests call the rules and controllers directly; integration tests boot the real pipeline with `WebApplicationFactory` (routing, JWT auth, validation, ProblemDetails) on an in-memory database. They cover:
+To deploy to Azure, follow [infra/README.md](infra/README.md). It provisions everything with Terraform and turns on the CD workflow, which logs in through OIDC, so no cloud secrets are stored in GitHub.
 
-* capacity limits, including a shipment exactly at capacity
-* rejecting vehicles that are on route or in maintenance
-* warehouse → vehicle loading and the resulting status changes
-* updates cannot bypass the capacity checks by changing the vehicle or raising the weight
-* pagination metadata, page size limits and status filters
-* delete rules (vehicles with shipments, shipments in transit) and duplicate tracking numbers
-* mapping of exceptions to HTTP status codes
-* delivery: a delivered shipment frees its vehicle, and cannot be delivered twice
-* JWT: protected endpoints return `401` without a token or with a tampered one, login → token → `/api/auth/me`, short signing keys are refused
-* the full workflow over HTTP: register, login, create vehicle, assign, deliver
-* business rule errors returned as ProblemDetails with the reason and a `traceId`
+## Technical decisions
 
-## CI/CD and Cloud Deployment
+**The rules live in one plain class.** `ShipmentAssignmentRules` has no EF Core or HTTP code in it. Both ways of loading a shipment (direct and from the warehouse) call it, so they can't drift apart, and the tests cover it without a database.
 
-* **CI** ([ci.yml](.github/workflows/ci.yml)) runs on every push and pull request: API build and tests, web typecheck, tests and build, Docker images, `terraform fmt` and `terraform validate`.
-* **CD** ([cd.yml](.github/workflows/cd.yml)) runs after CI passes on `main`: logs in to Azure with OpenID Connect (no stored secrets), pushes the image to Azure Container Registry, rolls out a new Container Apps revision and smoke tests `/health/ready`.
-* **Infrastructure as Code** ([infra/terraform](infra/terraform)) provisions the resource group, container registry, managed identity, MySQL flexible server, Log Analytics and the container app. The database password and JWT signing key are generated by Terraform and never stored in Git.
+**JWT instead of cookies.** The API serves a separate frontend and Swagger, and it may run behind a proxy in the cloud. A stateless bearer token works the same for all of them. Identity still does the password hashing and lockout (5 failed attempts lock the account for 15 minutes). The app won't start without a signing key of at least 32 bytes, so a weak default can't slip into production.
 
-Step-by-step deployment guide: [infra/README.md](infra/README.md).
+**One error format.** Validation errors, business rule errors and crashes all come back as ProblemDetails with a `traceId`. That's why the dashboard can show the API's own sentence ("Capacity exceeded! ...") instead of a generic "something went wrong". It also means a log line can be matched to the response a user saw.
 
-## Project Structure
+**Container Apps and Terraform for the cloud.** The app is already a container, so Container Apps runs it with HTTPS and scales it to zero when it's idle, which keeps a demo cheap. Terraform generates the database password and the JWT key and passes them to the app as secrets, so neither ever appears in the repository.
 
-```
-Controllers/        Auth, Shipment and Vehicle endpoints
-Services/           ShipmentAssignmentRules: capacity and availability rules, kept free of EF/HTTP
-Infrastructure/     GlobalExceptionHandler (ProblemDetails for unhandled errors)
-DTOs/               Request models with validation attributes, pagination types
-Models/, Enums/     EF Core entities and status enums
-Data/, Migrations/  DbContext and Code-First migrations
-tests/              xUnit test project
-web/                React + TypeScript dashboard (Vite, nginx image)
-infra/terraform/    Azure infrastructure (Terraform)
-docs/               Architecture diagrams and screenshots
-.github/workflows/  CI and CD pipelines
-```
+## Known limitations and next steps
 
----
+- Roles exist in the code (`Manager`, `WarehouseStaff`, ...) but aren't enforced yet. Any signed-in user can do everything.
+- Email confirmation is turned off, because no email sender exists yet. Refresh tokens aren't implemented either.
+- A truck carries one shipment per trip. A truck that is on the road can't take a second load.
+- The integration tests use an in-memory database. Running them against real MySQL with Testcontainers is the next step.
+- The Azure setup is written and validated (`terraform validate`), but it isn't deployed anywhere public yet.
 
-## Development Process & Roadmap
+## License
 
-This project is being developed to improve my competence in .NET and backend architectures and to test theoretical knowledge through real-world scenarios. I am tracking the current status of the project and my future goals step by step through the following list:
-
-### ✅ Completed Steps (Current Infrastructure)
-
-* [x] **Infrastructure and Database Setup:** Building the .NET 9 Web API and configuring the MySQL database connection.
-* [x] **Relational Data Model:** Designing the `Vehicle` and `Shipment` models and configuring the one-to-many relationship between them in the database.
-* [x] **CRUD Configuration:** Completing the API endpoints that manage vehicle creation, updating, deletion, filtering by status and pagination.
-* [x] **Logistics Business Logic:** Writing validation algorithms that check the vehicle's availability status and maximum carrying capacity (`MaxCapacity`) during the shipment assignment process.
-* [x] **Flexible Process Modelling:** Configuring methods that support scenarios where shipments are either stored in the warehouse first or directly loaded onto a vehicle.
-* [x] **Data Configuration:** Configuring decimal values such as capacity and weight to be stored with exactly two digits after the decimal point at the database level.
-* [x] **Error Resolution:** Permanently resolving the Object Cycle error that occurred during the JSON serialization of relational data by using `ReferenceHandler.IgnoreCycles`.
-* [x] **CORS Policy Configuration:** Successfully configuring CORS policies so that frontend applications can communicate with the API securely and without problems.
-* [x] **JWT Authentication:** Login endpoint issuing signed access tokens; vehicle and shipment endpoints are protected with `[Authorize]`.
-* [x] **Delivery Flow:** Delivering a shipment returns its vehicle to `Available`, closing the logistics loop.
-* [x] **Global Error Handling:** A central `IExceptionHandler` returns consistent ProblemDetails responses and hides internal details in production.
-* [x] **Pagination:** All list endpoints are paged with a capped page size.
-* [x] **Containerization & CI/CD:** Docker image, docker-compose with MySQL, GitHub Actions for CI and continuous deployment to Azure.
-* [x] **Infrastructure as Code:** Terraform for Azure Container Apps, Azure Database for MySQL and Azure Container Registry.
-
-### 🔜 Next Steps
-
-* [ ] **Role-based authorization:** Seed the `Manager`, `WarehouseStaff` and `DriversStaff` roles and restrict actions such as deleting vehicles to managers.
-* [ ] **Email confirmation and refresh tokens:** Send confirmation emails (then turn on `Identity:RequireConfirmedEmail`) and add refresh tokens.
-* [ ] **MySQL integration tests:** Run the integration tests against a real MySQL instance with Testcontainers.
+MIT, see [LICENSE](LICENSE).

@@ -30,5 +30,12 @@ services:
     ports:
       - "8080:8080"
 
+  web:
+    build: ./web
+    depends_on:
+      - api
+    ports:
+      - "3000:8080"
+
 volumes:
   db-data:

@@ -24,6 +24,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       Database__MigrateOnStartup: "true"
+      # Local development key only. Real deployments get a generated secret (see infra/).
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-local-dev-only-signing-key-change-me-0123456789}
       ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=logisticdesk;User=logistic;Password=${MYSQL_PASSWORD:-logistic_dev_pw};"
     ports:
       - "8080:8080"

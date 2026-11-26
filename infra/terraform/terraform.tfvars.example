@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is git-ignored.
+project_name         = "logisticdesk"
+environment          = "dev"
+location             = "westeurope"
+cors_allowed_origins = ["https://your-frontend.example.com"]
+enable_swagger       = true

@@ -150,4 +150,20 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.True(paths.GetProperty("/api/Vehicle").GetProperty("get").TryGetProperty("security", out _));
         Assert.True(doc.GetProperty("components").GetProperty("securitySchemes").TryGetProperty("Bearer", out _));
     }
+
+    [Fact]
+    public async Task Business_rule_violation_returns_problem_details_with_reason()
+    {
+        var client = await AuthenticatedClient();
+        var vehicle = (await (await client.PostAsJsonAsync("/api/Vehicle", new { plateNumber = "06 CAP 01", maxCapacity = 100 }))
+            .Content.ReadFromJsonAsync<Vehicle>(Json))!;
+
+        var response = await client.PostAsJsonAsync("/api/Shipment/assign-direct", new { weight = 250, receiverAddress = "Konya", vehicleId = vehicle.Id });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>(Json);
+        Assert.Equal(400, problem!.Status);
+        Assert.Contains("Capacity exceeded", problem.Detail);
+        Assert.True(problem.Extensions.ContainsKey("traceId"));
+    }
 }

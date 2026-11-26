@@ -81,13 +81,13 @@ More diagrams (request pipeline, shipment lifecycle, data model, Azure deploymen
 { "items": [ ... ], "page": 1, "pageSize": 20, "totalCount": 42, "totalPages": 3, "hasNextPage": true, "hasPreviousPage": false }
 ```
 
-`pageSize` is limited to 100.
+`pageSize` is limited to 100. A real request against the demo data, executed in Swagger UI with a JWT:
 
-**Errors:** every error response uses [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807) with a `traceId`. Unhandled exceptions are caught by a global `IExceptionHandler`: database conflicts return `409`, anything else `500`, and exception details are never exposed outside Development.
+![Paged shipment list in Swagger UI](docs/images/swagger-paged-list.png)
 
-```json
-{ "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5", "title": "Not Found", "status": 404, "traceId": "0HN..." }
-```
+**Errors:** every error response uses [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807) with a `traceId`: validation errors, business rule violations (`400`/`404`/`409` with the reason in `detail`) and unhandled exceptions, which a global `IExceptionHandler` maps to `409` for database conflicts and `500` otherwise, without exposing exception details outside Development. Loading a 15,000 kg shipment onto a 12,000 kg truck:
+
+![Capacity rule violation returned as ProblemDetails](docs/images/swagger-problem-details.png)
 
 Enums are sent and accepted as names (`"OnRoute"`), and tracking numbers are unique.
 
@@ -119,7 +119,7 @@ Connection strings and the JWT signing key are never committed: locally they com
 dotnet test LogisticDesk.slnx
 ```
 
-The `tests/LogisticDesk.Tests` project has 46 tests. Unit tests call the rules and controllers directly; integration tests boot the real pipeline with `WebApplicationFactory` (routing, JWT auth, validation, ProblemDetails) on an in-memory database. They cover:
+The `tests/LogisticDesk.Tests` project has 47 tests. Unit tests call the rules and controllers directly; integration tests boot the real pipeline with `WebApplicationFactory` (routing, JWT auth, validation, ProblemDetails) on an in-memory database. They cover:
 
 * capacity limits, including a shipment exactly at capacity
 * rejecting vehicles that are on route or in maintenance
@@ -131,6 +131,7 @@ The `tests/LogisticDesk.Tests` project has 46 tests. Unit tests call the rules a
 * delivery: a delivered shipment frees its vehicle, and cannot be delivered twice
 * JWT: protected endpoints return `401` without a token or with a tampered one, login → token → `/api/auth/me`, short signing keys are refused
 * the full workflow over HTTP: register, login, create vehicle, assign, deliver
+* business rule errors returned as ProblemDetails with the reason and a `traceId`
 
 ## CI/CD and Cloud Deployment
 

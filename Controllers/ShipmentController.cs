@@ -14,7 +14,7 @@ namespace LogisticDesk.Controllers
     [ApiController]
     [Authorize]
     [Produces("application/json")]
-    public class ShipmentController : ControllerBase
+    public class ShipmentController : ApiControllerBase
     {
         private readonly LogiDbContext _context;
         public ShipmentController(LogiDbContext context)
@@ -64,7 +64,7 @@ namespace LogisticDesk.Controllers
         [HttpPost("warehouse")] // URL: api/Shipment/warehouse
         [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         public async Task<IActionResult> AddShipmentToWarehouse([FromBody] ShipmentAddingDto shipmentDto)
         {
             if (shipmentDto == null)
@@ -99,8 +99,8 @@ namespace LogisticDesk.Controllers
         /// <remarks>The vehicle must be Available and its MaxCapacity must cover the shipment weight. On success the shipment becomes InTransit and the vehicle OnRoute.</remarks>
         [HttpPost("assign-direct")] // URL: api/Shipment/assign-direct
         [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> AssignShipmentDirectly([FromBody] ShipmentAddingDto shipmentDto)
         {
             // If VehicleId is not provided from the outside, throw an error
@@ -148,8 +148,8 @@ namespace LogisticDesk.Controllers
         /// <summary>Loads a shipment waiting in the warehouse onto an available vehicle.</summary>
         [HttpPut("{shipmentId}/load-to-vehicle/{vehicleId}")]
         [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> LoadFromWarehouseToVehicle(int shipmentId, int vehicleId)
         {
             var shipment = await _context.Shipments.FindAsync(shipmentId);
@@ -171,8 +171,8 @@ namespace LogisticDesk.Controllers
         /// <remarks>The vehicle returns to Available when it has no other shipment in transit.</remarks>
         [HttpPut("{id}/deliver")]
         [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         public async Task<IActionResult> DeliverShipment(int id)
         {
             var shipment = await _context.Shipments.FindAsync(id);
@@ -199,8 +199,8 @@ namespace LogisticDesk.Controllers
         /// <remarks>The vehicle cannot be changed here (use load-to-vehicle), and the weight cannot exceed the assigned vehicle's capacity.</remarks>
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(Shipment), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UpdateShipmentById(int id, [FromBody] ShipmentAddingDto shipmentDto)
         {
             if (id <= 0)
@@ -247,8 +247,8 @@ namespace LogisticDesk.Controllers
         /// <summary>Deletes a shipment that is not currently in transit.</summary>
         [HttpDelete("{id}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         public async Task<IActionResult> DeleteShipmentById(int id)
         {
             var shipment = await _context.Shipments.FindAsync(id);

@@ -14,7 +14,7 @@ namespace LogisticDesk.Controllers
     [ApiController]
     [Authorize]
     [Produces("application/json")]
-    public class VehicleController : ControllerBase
+    public class VehicleController : ApiControllerBase
     {
         private readonly LogiDbContext _context;
         public VehicleController(LogiDbContext context)
@@ -89,8 +89,8 @@ namespace LogisticDesk.Controllers
         /// <summary>Updates plate number, capacity, status and active flag of a vehicle.</summary>
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(Vehicle), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UpdateVehicleById(int id, [FromBody] VehicleAddingDto vehicleDto)
         {
             if (id <= 0)
@@ -113,8 +113,8 @@ namespace LogisticDesk.Controllers
         /// <summary>Deletes a vehicle that has no shipments assigned to it.</summary>
         [HttpDelete("{id}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         public async Task<IActionResult> DeleteVehicleById(int id)
         {
             var vehicle = await _context.Vehicles.FindAsync(id);
